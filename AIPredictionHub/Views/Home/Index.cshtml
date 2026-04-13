@@ -1,0 +1,72 @@
+@{
+    ViewData["Title"] = "Welcome - AI Prediction Hub";
+}
+
+<div class="row min-vh-75 align-items-center mt-5 animate-fade-in">
+    <div class="col-lg-6 mb-5 mb-lg-0">
+        <h1 class="display-3 fw-800 mb-3" style="font-weight: 800; letter-spacing: -0.05em;">
+            Next-Gen <span style="background: linear-gradient(135deg, #6366f1, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">AI Intelligence</span>
+        </h1>
+        <p class="lead text-muted mb-4 fs-4">
+            Powerful predictive analytics at your fingertips. From weather patterns to market values and fitness tracking.
+        </p>
+        <div class="d-flex gap-3">
+            <a asp-controller="Rainfall" asp-action="Index" class="btn btn-primary btn-lg px-4">
+                Explore Predictions <i class="fas fa-bolt ms-2"></i>
+            </a>
+            @if (!(User.Identity?.IsAuthenticated ?? false))
+            {
+                <a asp-controller="Account" asp-action="Register" class="btn btn-outline-light btn-lg px-4">
+                    Join Now
+                </a>
+            }
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="position-relative">
+            <div class="glass-panel p-5 text-center position-relative z-1">
+                <i class="fas fa-brain fa-5x mb-4" style="color: var(--primary-color)"></i>
+                <h3 class="fw-bold mb-3">Model Training Active</h3>
+                <div class="progress bg-dark mb-4" style="height: 10px; border-radius: 5px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 85%; background: var(--primary-color)"></div>
+                </div>
+                <div class="row text-start small text-muted">
+                    <div class="col-6 mb-2"><i class="fas fa-check-circle text-success me-2"></i> Rainfall Patterns</div>
+                    <div class="col-6 mb-2"><i class="fas fa-check-circle text-success me-2"></i> Laptop Pricing</div>
+                    <div class="col-6 mb-2"><i class="fas fa-check-circle text-success me-2"></i> Fitness Metrics</div>
+                    <div class="col-6 mb-2"><i class="fas fa-sync text-primary me-2"></i> Real-time Analysis</div>
+                </div>
+            </div>
+            <!-- Decorative blobs -->
+            <div class="position-absolute top-0 start-0 translate-middle" style="width: 200px; height: 200px; background: var(--primary-color); filter: blur(80px); opacity: 0.3; z-index: 0;"></div>
+            <div class="position-absolute bottom-0 end-0 translate-middle" style="width: 250px; height: 250px; background: var(--secondary-color); filter: blur(100px); opacity: 0.2; z-index: 0;"></div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-5 pt-5 animate-fade-in" style="animation-delay: 0.2s">
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 p-4">
+            <div class="mb-3"><i class="fas fa-cloud-sun fa-2x text-primary"></i></div>
+            <h4 class="fw-bold">Rainfall</h4>
+            <p class="text-muted">Predict precipitation levels using advanced meteorological models and historical data.</p>
+            <a asp-controller="Rainfall" asp-action="Index" class="mt-auto text-primary text-decoration-none fw-bold">Try it <i class="fas fa-arrow-right ms-1 small"></i></a>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 p-4">
+            <div class="mb-3"><i class="fas fa-laptop-code fa-2x text-primary"></i></div>
+            <h4 class="fw-bold">Laptop Value</h4>
+            <p class="text-muted">Analyze hardware specs to predict market value and performance benchmarks accurately.</p>
+            <a asp-controller="Laptop" asp-action="Index" class="mt-auto text-primary text-decoration-none fw-bold">Try it <i class="fas fa-arrow-right ms-1 small"></i></a>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 p-4">
+            <div class="mb-3"><i class="fas fa-running fa-2x text-primary"></i></div>
+            <h4 class="fw-bold">Fitness Analysis</h4>
+            <p class="text-muted">Transform your health data into actionable insights for better performance and recovery.</p>
+            <a asp-controller="Fitness" asp-action="Index" class="mt-auto text-primary text-decoration-none fw-bold">Try it <i class="fas fa-arrow-right ms-1 small"></i></a>
+        </div>
+    </div>
+</div>

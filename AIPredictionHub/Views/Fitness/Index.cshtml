@@ -1,0 +1,115 @@
+@model AIPredictionHub.Models.Fitness.FitnessViewModel
+
+@{
+    ViewData["Title"] = "Fitness Prediction";
+}
+
+<div class="row mt-4 animate-fade-in">
+    <div class="col-lg-5">
+        <div class="glass-panel">
+            <h2 class="fw-bold mb-4"><i class="fas fa-skating text-primary me-2"></i> Fitness</h2>
+            <p class="text-muted small mb-4">Input your workout metrics to estimate calorie expenditure.</p>
+
+            <form asp-action="Predict" method="post" id="predictionForm" onsubmit="showLoader()">
+                <div asp-validation-summary="ModelOnly" class="text-danger small mb-3"></div>
+
+                <div class="mb-3">
+                    <label asp-for="Input.Weight" class="form-label text-muted small text-uppercase fw-bold">Weight (kg)</label>
+                    <input asp-for="Input.Weight" class="form-control" placeholder="e.g. 75" />
+                    <span asp-validation-for="Input.Weight" class="text-danger small"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="Input.Duration" class="form-label text-muted small text-uppercase fw-bold">Duration (minutes)</label>
+                    <input asp-for="Input.Duration" class="form-control" placeholder="e.g. 45" />
+                    <span asp-validation-for="Input.Duration" class="text-danger small"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="Input.HeartRate" class="form-label text-muted small text-uppercase fw-bold">Heart Rate (bpm)</label>
+                    <input asp-for="Input.HeartRate" class="form-control" placeholder="e.g. 140" />
+                    <span asp-validation-for="Input.HeartRate" class="text-danger small"></span>
+                </div>
+
+                <div class="mb-4">
+                    <label asp-for="Input.ExerciseType" class="form-label text-muted small text-uppercase fw-bold">Exercise Type</label>
+                    <select asp-for="Input.ExerciseType" class="form-control">
+                        <option value="">-- Select Type --</option>
+                        <option>Running</option>
+                        <option>Cycling</option>
+                        <option>HIIT</option>
+                        <option>Walking</option>
+                    </select>
+                    <span asp-validation-for="Input.ExerciseType" class="text-danger small"></span>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary flex-grow-1">
+                        <i class="fas fa-burn me-2"></i> Analyze Workout
+                    </button>
+                    <button type="submit" formaction="/Fitness/Reset" class="btn btn-outline-light">
+                        <i class="fas fa-undo"></i>
+                    </button>
+                </div>
+            </form>
+
+            <div id="loader" class="text-center mt-4" style="display:none;">
+                <div class="spinner-grow text-primary" role="status"></div>
+                <p class="mt-2 text-muted small">Calculating burn rate...</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7 prediction-side">
+        @if (Model.IsPredicted && Model.Prediction != null)
+        {
+            <div class="h-100 d-flex flex-column gap-4">
+                <div class="card bg-secondary bg-opacity-10 border-secondary border-opacity-25 p-5 text-center flex-grow-1 d-flex flex-column justify-content-center animate-fade-in" style="background: linear-gradient(135deg, rgba(236, 72, 153, 0.1), rgba(99, 102, 241, 0.1))">
+                    <h5 class="text-secondary text-uppercase fw-bold small mb-3">Estimated Calorie Burn</h5>
+                    <div class="display-1 fw-bold mb-2">@Model.Prediction?.CaloriesBurned<span class="fs-3 ms-2 opacity-50">kcal</span></div>
+                    <div class="d-inline-block px-3 py-1 rounded-pill bg-secondary bg-opacity-25 text-white small mx-auto">
+                        <i class="fas fa-fire me-1"></i> High Intensity Target
+                    </div>
+                </div>
+
+                <div class="glass-panel animate-fade-in" style="animation-delay: 0.1s">
+                    <h6 class="text-muted text-uppercase fw-bold small mb-4"><i class="fas fa-heartbeat me-2"></i> ML Efficiency</h6>
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <div class="h3 fw-bold">@Model.Metrics?.R2</div>
+                            <div class="text-muted extra-small">Precision</div>
+                        </div>
+                        <div class="col-4 border-start border-end border-white border-opacity-10">
+                            <div class="h3 fw-bold">@Model.Metrics?.MAE</div>
+                            <div class="text-muted extra-small">Dev. Index</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="h3 fw-bold">@Model.Metrics?.RMSE</div>
+                            <div class="text-muted extra-small">Range Er.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="h-100 d-flex align-items-center justify-content-center p-5 empty-state-box">
+                <div class="text-center text-muted opacity-50">
+                    <i class="fas fa-heartbeat fa-4x mb-3"></i>
+                    <h5 class="fw-bold">Analysis Engine Ready</h5>
+                    <p class="small">Input your stats to begin processing</p>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<script>
+    function showLoader() {
+        document.getElementById("loader").style.display = "block";
+    }
+</script>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

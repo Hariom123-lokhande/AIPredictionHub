@@ -1,0 +1,180 @@
+@model AIPredictionHub.Models.Laptop.LaptopViewModel
+
+@{
+    ViewData["Title"] = "Laptop Price Prediction";
+}
+
+<div class="row mt-4 animate-fade-in">
+    <div class="col-lg-12 mb-4 text-center">
+        <h2 class="fw-800 display-5"><i class="fas fa-laptop text-primary me-2"></i> Laptop Price Predictor</h2>
+        <p class="text-muted">Fill in the specifications to estimate the market value</p>
+    </div>
+
+    @if (TempData["DummyDataSuccess"] != null || TempData["DummyDataError"] != null)
+    {
+        <div class="col-12">
+            @if (TempData["DummyDataSuccess"] != null)
+            {
+                <div class="alert alert-success border-0 glass-panel mb-4">
+                    <i class="fas fa-check-circle me-2"></i> @TempData["DummyDataSuccess"]
+                </div>
+            }
+            @if (TempData["DummyDataError"] != null)
+            {
+                <div class="alert alert-danger border-0 glass-panel mb-4">
+                    <i class="fas fa-exclamation-triangle me-2"></i> @TempData["DummyDataError"]
+                </div>
+            }
+        </div>
+    }
+
+    @if (Model.CsvNotFound)
+    {
+        <div class="col-12">
+            <div class="glass-panel text-center p-5 mb-4 border-warning border-opacity-25">
+                <i class="fas fa-database fa-3x text-warning mb-4"></i>
+                <h4 class="fw-bold">Dataset Not Found</h4>
+                <p class="text-muted mb-4">The <code>laptop.csv</code> training data is missing. Use dummy data to test the interface?</p>
+                <div class="d-flex justify-content-center gap-3">
+                    <form asp-action="UseDummyData" method="post">
+                        <button type="submit" class="btn btn-primary px-4">Yes, Use Demo Data</button>
+                    </form>
+                    <a asp-controller="Home" asp-action="Index" class="btn btn-outline-light px-4">Go Back</a>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="col-lg-6">
+            <div class="glass-panel">
+                <form asp-action="Predict" method="post" id="predictForm" onsubmit="showLoader()">
+                    <div class="row">
+                        <div class="col-12 mb-4">
+                            <label asp-for="Input.Brand" class="form-label text-muted small text-uppercase fw-bold">Brand</label>
+                            <select asp-for="Input.Brand" class="form-control" required>
+                                <option value="">Select Brand</option>
+                                <option value="Dell">Dell</option>
+                                <option value="HP">HP</option>
+                                <option value="Apple">Apple</option>
+                                <option value="Lenovo">Lenovo</option>
+                                <option value="Asus">Asus</option>
+                                <option value="Acer">Acer</option>
+                            </select>
+                        </div>
+
+                        <div class="col-12 mb-4">
+                            <label asp-for="Input.Processor" class="form-label text-muted small text-uppercase fw-bold">Processor</label>
+                            <select asp-for="Input.Processor" class="form-control" required>
+                                <option value="">Select Processor</option>
+                                <optgroup label="Intel">
+                                    <option value="Intel Core i3">Intel Core i3</option>
+                                    <option value="Intel Core i5">Intel Core i5</option>
+                                    <option value="Intel Core i7">Intel Core i7</option>
+                                    <option value="Intel Core i9">Intel Core i9</option>
+                                </optgroup>
+                                <optgroup label="AMD">
+                                    <option value="AMD Ryzen 3">AMD Ryzen 3</option>
+                                    <option value="AMD Ryzen 5">AMD Ryzen 5</option>
+                                    <option value="AMD Ryzen 7">AMD Ryzen 7</option>
+                                    <option value="AMD Ryzen 9">AMD Ryzen 9</option>
+                                </optgroup>
+                                <optgroup label="Apple">
+                                    <option value="Apple M1">Apple M1</option>
+                                    <option value="Apple M2">Apple M2</option>
+                                </optgroup>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6 mb-4">
+                            <label asp-for="Input.RAM" class="form-label text-muted small text-uppercase fw-bold">RAM (GB)</label>
+                            <input asp-for="Input.RAM" type="number" class="form-control" placeholder="16" required />
+                        </div>
+
+                        <div class="col-md-6 mb-4">
+                            <label asp-for="Input.Storage" class="form-label text-muted small text-uppercase fw-bold">Storage (GB)</label>
+                            <input asp-for="Input.Storage" type="number" class="form-control" placeholder="512" required />
+                        </div>
+
+                        <div class="col-12 mb-4">
+                            <label asp-for="Input.ScreenSize" class="form-label text-muted small text-uppercase fw-bold">Screen Size (inches)</label>
+                            <input asp-for="Input.ScreenSize" type="number" step="0.1" class="form-control" placeholder="15.6" required />
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary flex-grow-1 btn-lg">
+                            <i class="fas fa-calculator me-2"></i> Estimate Price
+                        </button>
+                        <button type="submit" formaction="/Laptop/Reset" class="btn btn-outline-light btn-lg">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </form>
+
+                <div id="loader" class="text-center mt-4" style="display:none;">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted small">Processing hardware specs...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            @if (Model.IsPredicted && Model.Prediction != null)
+            {
+                <div class="h-100 d-flex flex-column gap-4">
+                    <div class="card bg-success bg-opacity-10 border-success border-opacity-25 p-5 text-center flex-grow-1 d-flex flex-column justify-content-center animate-fade-in">
+                        <h6 class="text-success text-uppercase fw-bold small mb-3">Estimated Market Value</h6>
+                        <div class="display-3 fw-bold mb-2">
+                            <span class="fs-2 opacity-50">$</span>@Model.Prediction.PredictedPrice.ToString("N0")
+                        </div>
+                        <p class="text-muted mb-0">Based on analyzed market trends for similar configurations.</p>
+                    </div>
+
+                    @if (Model.Metrics != null)
+                    {
+                        <div class="glass-panel animate-fade-in" style="animation-delay: 0.1s">
+                            <h6 class="text-muted text-uppercase fw-bold small mb-4"><i class="fas fa-microchip me-2"></i> Analysis Stats</h6>
+                            <div class="row text-center">
+                                <div class="col-4">
+                                    <div class="fw-bold">@Model.Metrics.R2</div>
+                                    <div class="text-muted extra-small">Confidence</div>
+                                </div>
+                                <div class="col-4 border-start border-end border-white border-opacity-10">
+                                    <div class="fw-bold">@Model.Metrics.MAE</div>
+                                    <div class="text-muted extra-small">Var. Index</div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="fw-bold">@Model.Metrics.RMSE</div>
+                                    <div class="text-muted extra-small">Error Ref.</div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="h-100 d-flex align-items-center justify-content-center p-5 empty-state-box">
+                    <div class="text-center text-muted opacity-50">
+                        <i class="fas fa-tag fa-4x mb-3"></i>
+                        <h5 class="fw-bold">Calculation Result</h5>
+                        <p class="small">Input specs to see the valution</p>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<script>
+    function showLoader() {
+        if (document.getElementById("predictForm").checkValidity()) {
+            document.getElementById("loader").style.display = "block";
+        }
+    }
+</script>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

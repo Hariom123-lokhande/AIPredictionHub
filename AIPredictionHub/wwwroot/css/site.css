@@ -1,0 +1,377 @@
+:root {
+    --primary-color: #6366f1;
+    --primary-hover: #4f46e5;
+    --secondary-color: #ec4899;
+    --bg-dark: #0f172a;
+    --bg-card: #1e293b;
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --glass-bg: rgba(30, 41, 59, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.1);
+}
+
+/* Override Bootstrap muted text for dark theme visibility */
+.text-muted {
+    color: #94a3b8 !important;
+}
+
+/* Description text inside glass panels */
+.glass-panel p,
+.glass-panel small,
+.glass-panel .small {
+    color: #94a3b8;
+}
+
+body {
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    overflow-x: hidden;
+    background-image: radial-gradient(circle at 0% 0%, rgba(99, 102, 241, 0.15) 0%, transparent 25%),
+                      radial-gradient(circle at 100% 100%, rgba(236, 72, 153, 0.1) 0%, transparent 25%);
+}
+
+main {
+    flex: 1;
+    overflow-y: auto;
+}
+
+/* ─── Custom Scrollbar ──────────────────────────── */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-dark);
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(99, 102, 241, 0.4);
+    border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-color);
+}
+
+/* Smooth scroll */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Text selection color */
+::selection {
+    background: rgba(99, 102, 241, 0.4);
+    color: #fff;
+}
+
+.navbar {
+    background: var(--glass-bg) !important;
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--glass-border) !important;
+    padding: 1rem 0;
+}
+
+.navbar-brand {
+    font-weight: 800;
+    font-size: 1.5rem;
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.025em;
+}
+
+.nav-link {
+    color: var(--text-main) !important;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    margin: 0 0.5rem;
+    padding: 0.5rem 1rem !important;
+    border-radius: 0.5rem;
+}
+
+.nav-link:hover {
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--primary-color) !important;
+}
+
+.nav-link.active,
+.navbar-nav .nav-item.active .nav-link {
+    background: rgba(99, 102, 241, 0.15) !important;
+    color: var(--primary-color) !important;
+    font-weight: 600;
+}
+
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    border-radius: 1.25rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.75rem;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+.form-control {
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--glass-border);
+    color: #ffffff !important;
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+}
+
+.form-control:focus {
+    background: rgba(15, 23, 42, 0.8);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    color: #ffffff !important;
+}
+
+.footer {
+    background: var(--bg-dark);
+    border-top: 1px solid var(--glass-border);
+    padding: 2rem 0;
+    width: 100%;
+    margin-top: auto;
+}
+
+.empty-state-box {
+    border: 2px dashed rgba(255, 255, 255, 0.05);
+    border-radius: 1.5rem;
+    padding: 3rem;
+    background: rgba(255, 255, 255, 0.01);
+    transition: all 0.3s ease;
+}
+
+.empty-state-box:hover {
+    border-color: rgba(99, 102, 241, 0.2);
+    background: rgba(99, 102, 241, 0.02);
+}
+
+/* Auth Pages Specific */
+.auth-container {
+    max-width: 450px;
+    margin: 4rem auto;
+}
+
+.auth-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.auth-header h2 {
+    font-weight: 800;
+    font-size: 2.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.auth-header p {
+    color: var(--text-muted);
+}
+
+/* Glass card */
+.glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 1.5rem;
+    padding: 2.5rem;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Select boxes */
+select.form-control,
+select.form-select {
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--glass-border);
+    color: var(--text-main);
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    appearance: auto;
+}
+
+select.form-control:focus,
+select.form-select:focus {
+    background: rgba(15, 23, 42, 0.8);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    color: var(--text-main);
+}
+
+select.form-control option,
+select.form-select option {
+    background-color: #1e293b;
+    color: var(--text-main);
+}
+
+/* Input groups */
+.input-group-text {
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--glass-border);
+    color: var(--text-muted);
+}
+
+.input-group .form-control {
+    border-radius: 0 0.75rem 0.75rem 0 !important;
+}
+
+.input-group .input-group-text {
+    border-radius: 0.75rem 0 0 0.75rem;
+}
+
+/* Placeholder */
+.form-control::placeholder {
+    color: rgba(148, 163, 184, 0.65);
+    font-size: 0.9rem;
+}
+
+/* Form label */
+.form-label {
+    color: #cbd5e1 !important;
+    margin-bottom: 0.5rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    font-weight: 700 !important;
+}
+
+/* Outline buttons */
+.btn-outline-light {
+    border-color: var(--glass-border);
+    color: var(--text-muted);
+    border-radius: 0.75rem;
+    padding: 0.75rem 1.25rem;
+    transition: all 0.2s;
+}
+
+.btn-outline-light:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: var(--text-main);
+}
+
+/* Dropdown menu dark polish */
+.dropdown-menu.glass-panel {
+    border: 1px solid var(--glass-border) !important;
+}
+
+/* Spinner colors */
+.spinner-border.text-primary,
+.spinner-grow.text-primary {
+    color: var(--primary-color) !important;
+}
+
+/* Min height for prediction side */
+.prediction-side {
+    min-height: 400px;
+}
+
+/* ─── Global Input Visibility Fix ──────────────────────── */
+
+/* Make sure ALL inputs, textareas, selects show white text */
+input.form-control,
+textarea.form-control,
+select.form-control,
+select.form-select {
+    color: #f1f5f9 !important;
+    -webkit-text-fill-color: #f1f5f9 !important;
+}
+
+/* Fix Chrome autofill overriding background */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0px 1000px #1e293b inset !important;
+    -webkit-text-fill-color: #f1f5f9 !important;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Stronger select text color */
+select.form-control,
+select.form-select {
+    color: #f1f5f9 !important;
+    background-color: rgba(15, 23, 42, 0.6) !important;
+}
+
+select.form-control option,
+select.form-select option {
+    background-color: #1e293b !important;
+    color: #f1f5f9 !important;
+}
+
+/* Glass panel headings and content */
+.glass-panel h2,
+.glass-panel h3,
+.glass-panel h4,
+.glass-panel h5,
+.glass-panel h6 {
+    color: #f8fafc !important;
+}
+
+/* Better label uppercase look */
+label.form-label,
+.form-label {
+    color: #cbd5e1 !important;
+    font-weight: 600 !important;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+/* Input group icon visibility */
+.input-group-text {
+    color: #94a3b8 !important;
+    background: rgba(15, 23, 42, 0.6) !important;
+    border-color: var(--glass-border) !important;
+    font-size: 0.9rem;
+}
+
+/* Input group: remove double borders */
+.input-group .form-control {
+    border-left: none !important;
+}
+
+/* Prediction result number display */
+.display-1.fw-bold,
+.display-3.fw-bold {
+    color: #f8fafc !important;
+}
+
+/* Validation error messages */
+.text-danger {
+    color: #f87171 !important;
+    font-size: 0.8rem;
+}
