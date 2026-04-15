@@ -7,7 +7,6 @@ namespace AIPredictionHub.Models.Laptop
         public LaptopMetrics? Metrics { get; set; }
         public bool IsPredicted { get; set; } = false;
 
-        
         public bool CsvNotFound { get; set; } = false;
     }
 }

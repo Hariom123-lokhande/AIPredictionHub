@@ -14,11 +14,11 @@ builder.Host.UseSerilog();
 // Add services to the container.
 builder.Services.AddControllersWithViews();
 builder.Services.AddDbContext<AIPredictionHub.Data.ApplicationDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddSingleton<MLContext>(); //dependency injection
-builder.Services.AddSingleton<AIPredictionHub.Services.FitnessService>(); //dependency injection
-builder.Services.AddSingleton<AIPredictionHub.Services.RainfallService>(); //dependency injection
-builder.Services.AddSingleton<AIPredictionHub.Services.LaptopService>(); //dependency injection
+builder.Services.AddSingleton<AIPredictionHub.Services.IFitnessService, AIPredictionHub.Services.FitnessService>(); //dependency injection
+builder.Services.AddSingleton<AIPredictionHub.Services.IRainfallService, AIPredictionHub.Services.RainfallService>(); //dependency injection
+builder.Services.AddSingleton<AIPredictionHub.Services.ILaptopService, AIPredictionHub.Services.LaptopService>(); //dependency injection
 builder.Services.AddScoped<AIPredictionHub.Services.AuthService>(); //dependency injection
 
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
@@ -34,11 +34,11 @@ builder.Services.AddAuthentication(options =>
     options.LoginPath = "/Account/Login";
     options.LogoutPath = "/Account/Logout";
 })
-.AddJwtBearer(x =>
+.AddJwtBearer(options =>
 {
-    x.RequireHttpsMetadata = false;
-    x.SaveToken = true;
-    x.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+    options.RequireHttpsMetadata = false;
+    options.SaveToken = true;
+    options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
     {
         ValidateIssuerSigningKey = true,
         IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(key),

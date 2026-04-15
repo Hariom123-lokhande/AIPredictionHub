@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text;
 using AIPredictionHub.Data;
 using AIPredictionHub.Models;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
 namespace AIPredictionHub.Services
@@ -113,10 +114,10 @@ namespace AIPredictionHub.Services
                 _logger.LogInformation("Successfully registered new user: {Username}", model.Username);
                 return true;
             }
-            catch (Exception ex)
+            catch (DbUpdateException ex)
             {
-                _logger.LogError(ex, "Error occurred during user registration for {Username}", model.Username);
-                throw;
+                _logger.LogError(ex, "Database update failed during registration for {Username}", model.Username);
+                throw new InvalidOperationException("User registration failed while saving data.", ex);
             }
         }
     }

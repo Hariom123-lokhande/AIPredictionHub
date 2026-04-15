@@ -5,96 +5,102 @@ using Microsoft.Extensions.Logging;
 
 namespace AIPredictionHub.Services
 {
-    public class RainfallService
+    public class RainfallService : IRainfallService
     {
+        private const string DATA_FILE_NAME = "rainfall.csv";
+        private const string MODEL_FILE_NAME = "rainfall_model.zip";
+        private const string DATA_FOLDER = "Data";
+        private const string MODELS_FOLDER = "Models";
+        private const string RAINFALL_SUBFOLDER = "Rainfall";
+
         private readonly MLContext _mlContext;
         private readonly ILogger<RainfallService> _logger;
+        private readonly Lazy<Task> _initializationTask;
         private ITransformer _model = null!;
         private PredictionEngine<RainfallData, RainfallPrediction> _predictionEngine = null!;
         private RainfallMetrics _metrics = null!;
 
-        public RainfallService(MLContext mlContext, ILogger<RainfallService> logger) //dependency injection
+        public RainfallService(MLContext mlContext, ILogger<RainfallService> logger)
         {
             _mlContext = mlContext;
             _logger = logger;
             _logger.LogInformation("Initializing RainfallService and training model");
-            TrainModel();
+            _initializationTask = new Lazy<Task>(() => TrainModelAsync());
+            _ = _initializationTask.Value;
         }
 
-        // data cleaning
-        private IDataView LoadAndCleanData(string path)
+        private async Task EnsureModelInitializedAsync()
+        {
+            try
+            {
+                await _initializationTask.Value;
+            }
+            catch (FileNotFoundException ex)
+            {
+                _logger.LogError(ex, "Rainfall initialization failed due to missing data file");
+                throw new InvalidOperationException("Rainfall model initialization failed because training data is missing.", ex);
+            }
+        }
+
+        /// <summary>
+        /// Loads data from CSV and cleans it by removing nulls, invalid ranges, and duplicates.
+        /// </summary>
+        private async Task<IDataView> LoadAndCleanDataAsync(string path)
         {
             _logger.LogInformation("Loading and cleaning data from {FileName}", Path.GetFileName(path));
-            var rawData = _mlContext.Data.LoadFromTextFile<RainfallData>(
+            
+            // Reading file is an I/O operation
+            var rawDataList = await Task.Run(() => _mlContext.Data.LoadFromTextFile<RainfallData>(
                 path: path,
                 hasHeader: true,
-                separatorChar: ',');
+                separatorChar: ','));
 
             var cleanedList = _mlContext.Data
-                .CreateEnumerable<RainfallData>(rawData, reuseRowObject: false)
-
-                //Remove nulls
-                .Where(x =>
-                    x != null &&
-                    !float.IsNaN(x.Temperature) &&
-                    !float.IsNaN(x.Humidity) &&
-                    !float.IsNaN(x.WindSpeed) &&
-                    !float.IsNaN(x.Pressure) &&
-                    !float.IsNaN(x.Rainfall))
-
-                //Remove invalid ranges
-                .Where(x =>
-                    x.Temperature >= -50 && x.Temperature <= 60 &&
-                    x.Humidity >= 0 && x.Humidity <= 100 &&
-                    x.WindSpeed >= 0 && x.WindSpeed <= 300 &&
-                    x.Pressure >= 800 && x.Pressure <= 1100 &&
-                    x.Rainfall >= 0)
-
-                //Remove duplicates
-                .GroupBy(x => g(x))
-                .Select(g => g.First())
-
+                .CreateEnumerable<RainfallData>(rawDataList, reuseRowObject: false)
+                .Where(data => (data != null) &&
+                            (!float.IsNaN(data.Temperature)) &&
+                            (!float.IsNaN(data.Humidity)) &&
+                            (!float.IsNaN(data.WindSpeed)) &&
+                            (!float.IsNaN(data.Pressure)) &&
+                            (!float.IsNaN(data.Rainfall)))
+                .Where(data => (data.Temperature >= -50 && data.Temperature <= 60) &&
+                            (data.Humidity >= 0 && data.Humidity <= 100) &&
+                            (data.WindSpeed >= 0 && data.WindSpeed <= 300) &&
+                            (data.Pressure >= 800 && data.Pressure <= 1100) &&
+                            (data.Rainfall >= 0))
+                .GroupBy(data => new { data.Temperature, data.Humidity, data.WindSpeed, data.Pressure, data.Rainfall })
+                .Select(group => group.First())
                 .ToList();
 
             _logger.LogInformation("Data cleaning complete. {Count} records remain", cleanedList.Count);
             return _mlContext.Data.LoadFromEnumerable(cleanedList);
         }
 
-        private object g(RainfallData x) => new
-        {
-            x.Temperature,
-            x.Humidity,
-            x.WindSpeed,
-            x.Pressure,
-            x.Rainfall
-        };
-
-        private void TrainModel()
+        /// <summary>
+        /// Trains the Rainfall prediction model using LightGBM.
+        /// </summary>
+        public async Task TrainModelAsync()
         {
             try
             {
-                string path = Path.Combine(Directory.GetCurrentDirectory(), "Data", "rainfall.csv");
+                string path = Path.Combine(Directory.GetCurrentDirectory(), DATA_FOLDER, DATA_FILE_NAME);
 
-                //for check file
                 if (!File.Exists(path))
                 {
                     _logger.LogError("Rainfall training data not found: {FileName}", Path.GetFileName(path));
-                    throw new FileNotFoundException($"{Path.GetFileName(path)} not found in Data folder");
+                    throw new FileNotFoundException("Training data file not found.", Path.GetFileName(path));
                 }
 
-                //load and clean
-                var cleanedData = LoadAndCleanData(path);
-
-                //data is not enough after ytraining
+                var cleanedData = await LoadAndCleanDataAsync(path);
                 var count = _mlContext.Data.CreateEnumerable<RainfallData>(cleanedData, false).Count();
+                
                 if (count < 5)
                 {
                     _logger.LogWarning("Not enough valid data after cleaning ({Count} records)", count);
-                    throw new Exception("Not enough valid data after cleaning");
+                    throw new InvalidOperationException("Insufficient data for training.");
                 }
 
                 _logger.LogInformation("Building ML pipeline and fitting Rainfall model");
-                //dat split happens
                 var split = _mlContext.Data.TrainTestSplit(cleanedData, testFraction: 0.2);
 
                 var pipeline = _mlContext.Transforms
@@ -103,66 +109,75 @@ namespace AIPredictionHub.Services
                         nameof(RainfallData.Humidity),
                         nameof(RainfallData.WindSpeed),
                         nameof(RainfallData.Pressure))
-
-                    //Missingvalues handling
                     .Append(_mlContext.Transforms.ReplaceMissingValues("Features"))
-
-                    // Normalization
                     .Append(_mlContext.Transforms.NormalizeMinMax("Features"))
                     .Append(_mlContext.Regression.Trainers.LightGbm(
                         labelColumnName: "Label",
                         featureColumnName: "Features"));
 
-                _model = pipeline.Fit(split.TrainSet);
-                _predictionEngine = _mlContext.Model.CreatePredictionEngine<RainfallData, RainfallPrediction>(_model);
+                await Task.Run(() => 
+                {
+                    _model = pipeline.Fit(split.TrainSet);
+                    _predictionEngine = _mlContext.Model.CreatePredictionEngine<RainfallData, RainfallPrediction>(_model);
 
-                //evaluate
-                var predictions = _model.Transform(split.TestSet);
-                var metrics = _mlContext.Regression.Evaluate(predictions);
+                    var predictions = _model.Transform(split.TestSet);
+                    var evaluationMetrics = _mlContext.Regression.Evaluate(predictions);
 
-                // Save the trained model to a .zip file
-                string modelPath = Path.Combine(Directory.GetCurrentDirectory(), "Models", "Rainfall", "rainfall_model.zip");
+                    _metrics = new RainfallMetrics
+                    {
+                        RMSE = Math.Round(evaluationMetrics.RootMeanSquaredError, 3),
+                        MAE = Math.Round(evaluationMetrics.MeanAbsoluteError, 3),
+                        R2 = Math.Round(evaluationMetrics.RSquared, 3)
+                    };
+                });
+
+                string modelPath = Path.Combine(Directory.GetCurrentDirectory(), MODELS_FOLDER, RAINFALL_SUBFOLDER, MODEL_FILE_NAME);
                 Directory.CreateDirectory(Path.GetDirectoryName(modelPath)!);
                 _mlContext.Model.Save(_model, split.TrainSet.Schema, modelPath);
-                _logger.LogInformation("Rainfall model saved as {FileName}", Path.GetFileName(modelPath));
-
-                _metrics = new RainfallMetrics
-                {
-                    RMSE = Math.Round(metrics.RootMeanSquaredError, 3),
-                    MAE = Math.Round(metrics.MeanAbsoluteError, 3),
-                    R2 = Math.Round(metrics.RSquared, 3)
-                };
-                _logger.LogInformation("Rainfall model metrics: RMSE={RMSE}, MAE={MAE}, R2={R2}", _metrics.RMSE, _metrics.MAE, _metrics.R2);
+                
+                _logger.LogInformation("Rainfall model saved as {FileName}. Metrics: RMSE={RMSE}, MAE={MAE}, R2={R2}", 
+                    Path.GetFileName(modelPath), _metrics.RMSE, _metrics.MAE, _metrics.R2);
             }
-            catch (Exception ex)
+            catch (FileNotFoundException ex)
             {
-                _logger.LogError(ex, "Rainfall model training failed");
-                throw new Exception($"Model training failed: {ex.Message}");
+                _logger.LogError(ex, "Data file missing");
+                throw;
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogError(ex, "Training data quality issue");
+                throw;
+            }
+            catch (IOException ex)
+            {
+                _logger.LogError(ex, "Rainfall model training failed due to file I/O issue");
+                throw new InvalidOperationException("Model training failed because training data could not be accessed.", ex);
             }
         }
-        //prdiction
-        public (RainfallPrediction prediction, RainfallMetrics metrics) Predict(RainfallData input)
+
+        /// <summary>
+        /// Predicts rainfall based on the provided input data.
+        /// </summary>
+        public async Task<(RainfallPrediction prediction, RainfallMetrics metrics)> PredictAsync(RainfallData input)
         {
             if (input == null)
             {
-                _logger.LogWarning("Prediction failed: Input was null");
                 throw new ArgumentNullException(nameof(input));
             }
 
+            await EnsureModelInitializedAsync();
+
             if (_model == null || _predictionEngine == null)
             {
-                _logger.LogWarning("Prediction failed: Model or PredictionEngine is null");
-                throw new Exception("Model not trained");
+                throw new InvalidOperationException("Model is not trained and cannot perform predictions.");
             }
 
             ValidateInput(input);
 
             try
             {
-                _logger.LogDebug("Running prediction for input: {@Input}", input);
-                var result = _predictionEngine.Predict(input);
+                var result = await Task.Run(() => _predictionEngine.Predict(input));
 
-                //Negative rainfall doesn't make sense
                 if (result.PredictedRainfall < 0)
                 {
                     result.PredictedRainfall = 0;
@@ -170,47 +185,47 @@ namespace AIPredictionHub.Services
 
                 return (result, _metrics);
             }
-            catch (Exception ex)
+            catch (InvalidOperationException ex)
             {
-                _logger.LogError(ex, "Prediction execution failed");
-                throw new Exception($"Prediction failed: {ex.Message}");
+                _logger.LogError(ex, "Prediction failed due to model state issue");
+                throw;
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogError(ex, "Prediction execution failed due to invalid rainfall input");
+                throw new InvalidOperationException("An error occurred while processing the prediction input.", ex);
             }
         }
 
-        
-        //input validation
         private void ValidateInput(RainfallData input)
         {
             if (input.Temperature < -50 || input.Temperature > 60)
             {
-                throw new ArgumentException("Temperature out of range");
+                throw new ArgumentOutOfRangeException(nameof(input.Temperature), "Temperature must be between -50 and 60.");
             }
 
             if (input.Humidity < 0 || input.Humidity > 100)
             {
-                throw new ArgumentException("Invalid humidity");
+                throw new ArgumentOutOfRangeException(nameof(input.Humidity), "Humidity must be between 0 and 100.");
             }
 
             if (input.WindSpeed < 0 || input.WindSpeed > 300)
             {
-                throw new ArgumentException("Invalid wind speed");
+                throw new ArgumentOutOfRangeException(nameof(input.WindSpeed), "Wind speed must be between 0 and 300.");
             }
 
             if (input.Pressure < 800 || input.Pressure > 1100)
             {
-                throw new ArgumentException("Invalid pressure");
+                throw new ArgumentOutOfRangeException(nameof(input.Pressure), "Pressure must be between 800 and 1100.");
             }
         }
 
-        // get metrics
+        /// <summary>
+        /// Retrieves the evaluation metrics of the trained model.
+        /// </summary>
         public RainfallMetrics GetMetrics()
         {
-            if (_metrics == null)
-            {
-                throw new Exception("Metrics not available");
-            }
-
-            return _metrics;
+            return _metrics ?? throw new InvalidOperationException("Metrics are not available because the model has not been trained.");
         }
     }
 }

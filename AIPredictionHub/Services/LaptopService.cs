@@ -5,10 +5,17 @@ using Microsoft.Extensions.Logging;
 
 namespace AIPredictionHub.Services
 {
-    public class LaptopService
+    public class LaptopService : ILaptopService
     {
+        private const string DATA_FILE_NAME = "laptop.csv";
+        private const string MODEL_FILE_NAME = "laptop_model.zip";
+        private const string DATA_FOLDER = "Data";
+        private const string MODELS_FOLDER = "Models";
+        private const string LAPTOP_SUBFOLDER = "Laptop";
+
         private readonly MLContext _mlContext;
         private readonly ILogger<LaptopService> _logger;
+        private readonly Lazy<Task> _initializationTask;
         private ITransformer? _model;
         private PredictionEngine<LaptopData, LaptopPrediction>? _predictionEngine;
         private LaptopMetrics? _metrics;
@@ -16,74 +23,79 @@ namespace AIPredictionHub.Services
         /// <summary>True when the CSV file was not found at startup.</summary>
         public bool CsvNotFound { get; private set; } = false;
 
-        public LaptopService(MLContext mlContext, ILogger<LaptopService> logger) //dependency injection
+        public LaptopService(MLContext mlContext, ILogger<LaptopService> logger)
         {
             _mlContext = mlContext;
             _logger = logger;
             _logger.LogInformation("Initializing LaptopService and starting model training");
-            TrainModel();
+            _initializationTask = new Lazy<Task>(() => TrainModelAsync());
+            _ = _initializationTask.Value;
         }
-        /// Trains the model using the static <see cref="LaptopDummyData"/> records.
-        public void TrainWithDummyData()
+
+        private async Task EnsureModelInitializedAsync()
+        {
+            try
+            {
+                await _initializationTask.Value;
+            }
+            catch (IOException ex)
+            {
+                _logger.LogError(ex, "Laptop initialization failed due to CSV access issue");
+                throw new InvalidOperationException("Laptop model initialization failed because CSV data could not be accessed.", ex);
+            }
+        }
+
+        /// <summary>
+        /// Trains the model using provided fallback dummy data.
+        /// </summary>
+        public async Task TrainWithDummyDataAsync()
         {
             _logger.LogInformation("Training with dummy data instead of CSV");
             var records = LaptopDummyData.GetRecords();
             var dataView = _mlContext.Data.LoadFromEnumerable(records);
-            BuildAndFitPipeline(dataView);
-            CsvNotFound = false;   // model is now ready
+            await BuildAndFitPipelineAsync(dataView);
+            CsvNotFound = false; 
             _logger.LogInformation("Laptop model trained successfully with dummy data");
         }
-        // DATA CLEANING
 
-        private IDataView LoadAndCleanData(string path)
+        /// <summary>
+        /// Loads and cleans laptop data from the CSV file.
+        /// </summary>
+        private async Task<IDataView> LoadAndCleanDataAsync(string path)
         {
             _logger.LogInformation("Loading and cleaning data from {FileName}", Path.GetFileName(path));
-            var rawData = _mlContext.Data.LoadFromTextFile<LaptopData>(
+            
+            var rawDataList = await Task.Run(() => _mlContext.Data.LoadFromTextFile<LaptopData>(
                 path: path,
                 hasHeader: true,
-                separatorChar: ',');
+                separatorChar: ','));
 
             var cleanedList = _mlContext.Data
-                .CreateEnumerable<LaptopData>(rawData, reuseRowObject: false)
-
-                // Remove rows with missing values
-                .Where(x =>
-                    x != null &&
-                    !float.IsNaN(x.RAM) &&
-                    !float.IsNaN(x.Storage) &&
-                    !float.IsNaN(x.ScreenSize) &&
-                    !float.IsNaN(x.Price))
-
-                // Remove unrealistic values
-                .Where(x =>
-                    x.RAM > 0 && x.RAM <= 128 &&
-                    x.Storage > 0 && x.Storage <= 4000 &&
-                    x.ScreenSize >= 10 && x.ScreenSize <= 20 &&
-                    x.Price > 0)
-
-                // Remove duplicate rows
-                .GroupBy(x => new
-                {
-                    x.Brand,
-                    x.Processor,
-                    x.RAM,
-                    x.Storage,
-                    x.ScreenSize,
-                    x.Price
-                })
-                .Select(g => g.First())
-
+                .CreateEnumerable<LaptopData>(rawDataList, reuseRowObject: false)
+                .Where(data => (data != null) &&
+                            (!float.IsNaN(data.RAM)) &&
+                            (!float.IsNaN(data.Storage)) &&
+                            (!float.IsNaN(data.ScreenSize)) &&
+                            (!float.IsNaN(data.Price)))
+                .Where(data => (data.RAM > 0 && data.RAM <= 128) &&
+                            (data.Storage > 0 && data.Storage <= 4000) &&
+                            (data.ScreenSize >= 10 && data.ScreenSize <= 20) &&
+                            (data.Price > 0))
+                .GroupBy(data => new { data.Brand, data.Processor, data.RAM, data.Storage, data.ScreenSize, data.Price })
+                .Select(group => group.First())
                 .ToList();
 
             _logger.LogInformation("Data cleaning complete. {Count} records remain", cleanedList.Count);
             return _mlContext.Data.LoadFromEnumerable(cleanedList);
         }
-        // MODEL TRAINING
-        private void TrainModel()
-        {
-            string path = Path.Combine(Directory.GetCurrentDirectory(), "Data", "laptop.csv");
 
-            // If the CSV is missing, set the flag and return — do NOT throw.
+        /// <summary>
+        /// Reads CSV data and trains the model if the file exists.
+        /// </summary>
+        public async Task TrainModelAsync()
+        {
+            string path = Path.Combine(Directory.GetCurrentDirectory(), DATA_FOLDER, DATA_FILE_NAME);
+
             if (!File.Exists(path))
             {
                 _logger.LogWarning("Laptop training data not found: {FileName}", Path.GetFileName(path));
@@ -93,34 +105,38 @@ namespace AIPredictionHub.Services
 
             try
             {
-                // Load and clean data
-                var cleanedData = LoadAndCleanData(path);
-
-                // Ensure enough data for training
+                var cleanedData = await LoadAndCleanDataAsync(path);
                 var count = _mlContext.Data.CreateEnumerable<LaptopData>(cleanedData, false).Count();
+                
                 if (count < 5)
                 {
                     _logger.LogWarning("Not enough valid data after cleaning ({Count} records)", count);
-                    throw new Exception("Not enough valid data after cleaning.");
+                    throw new InvalidOperationException("Insufficient data for training.");
                 }
 
-                BuildAndFitPipeline(cleanedData);
+                await BuildAndFitPipelineAsync(cleanedData);
                 _logger.LogInformation("Laptop model successfully trained from CSV");
             }
-            catch (Exception ex)
+            catch (InvalidOperationException ex)
             {
-                _logger.LogError(ex, "Laptop training failed from CSV");
-                throw new Exception($"Training failed: {ex.Message}");
+                _logger.LogError(ex, "Laptop training failed due to data quality issue");
+                throw;
+            }
+            catch (IOException ex)
+            {
+                _logger.LogError(ex, "Laptop training failed from CSV due to file I/O issue");
+                throw new InvalidOperationException("Laptop model training failed because CSV data could not be accessed.", ex);
             }
         }
 
-        private void BuildAndFitPipeline(IDataView data)
+        /// <summary>
+        /// Logic for building the ML pipeline and fitting the model.
+        /// </summary>
+        private async Task BuildAndFitPipelineAsync(IDataView data)
         {
-            _logger.LogInformation("Building ML pipeline and fitting model");
-            // Split data into train and test
+            _logger.LogInformation("Building ML pipeline and fitting Laptop model");
             var split = _mlContext.Data.TrainTestSplit(data, 0.2);
 
-            // Build ML pipeline
             var pipeline = _mlContext.Transforms.Categorical.OneHotEncoding("BrandEncoded", nameof(LaptopData.Brand))
                 .Append(_mlContext.Transforms.Categorical.OneHotEncoding("ProcessorEncoded", nameof(LaptopData.Processor)))
                 .Append(_mlContext.Transforms.Concatenate("Features",
@@ -129,69 +145,59 @@ namespace AIPredictionHub.Services
                     nameof(LaptopData.RAM),
                     nameof(LaptopData.Storage),
                     nameof(LaptopData.ScreenSize)))
-
-                // Handle missing values
                 .Append(_mlContext.Transforms.ReplaceMissingValues("Features"))
-
-                // Normalize feature values
                 .Append(_mlContext.Transforms.NormalizeMinMax("Features"))
-
-                // Train using LightGBM regression
                 .Append(_mlContext.Regression.Trainers.LightGbm(
                     labelColumnName: "Label",
                     featureColumnName: "Features"));
 
-            // Train model
-            _model = pipeline.Fit(split.TrainSet);
+            await Task.Run(() => 
+            {
+                _model = pipeline.Fit(split.TrainSet);
+                _predictionEngine = _mlContext.Model.CreatePredictionEngine<LaptopData, LaptopPrediction>(_model);
 
-            //Create prediction engine
-            _predictionEngine = _mlContext.Model.CreatePredictionEngine<LaptopData, LaptopPrediction>(_model);
+                var predictions = _model.Transform(split.TestSet);
+                var evaluationMetrics = _mlContext.Regression.Evaluate(predictions);
 
-            // Evaluate model performance
-            var predictions = _model.Transform(split.TestSet);
-            var metrics = _mlContext.Regression.Evaluate(predictions);
+                _metrics = new LaptopMetrics
+                {
+                    RMSE = Math.Round(evaluationMetrics.RootMeanSquaredError, 3),
+                    MAE  = Math.Round(evaluationMetrics.MeanAbsoluteError, 3),
+                    R2   = Math.Round(evaluationMetrics.RSquared, 3)
+                };
+            });
 
-            // Save trained model
-            string modelPath = Path.Combine(Directory.GetCurrentDirectory(), "Models", "Laptop", "laptop_model.zip");
+            string modelPath = Path.Combine(Directory.GetCurrentDirectory(), MODELS_FOLDER, LAPTOP_SUBFOLDER, MODEL_FILE_NAME);
             Directory.CreateDirectory(Path.GetDirectoryName(modelPath)!);
             _mlContext.Model.Save(_model, split.TrainSet.Schema, modelPath);
-            _logger.LogInformation("Laptop model saved as {FileName}", Path.GetFileName(modelPath));
-
-            // Store evaluation metrics
-            _metrics = new LaptopMetrics
-            {
-                RMSE = Math.Round(metrics.RootMeanSquaredError, 3),
-                MAE  = Math.Round(metrics.MeanAbsoluteError, 3),
-                R2   = Math.Round(metrics.RSquared, 3)
-            };
-            _logger.LogInformation("Laptop model metrics: RMSE={RMSE}, MAE={MAE}, R2={R2}", _metrics.RMSE, _metrics.MAE, _metrics.R2);
+            _logger.LogInformation("Laptop model saved. Metrics: RMSE={RMSE}, R2={R2}", _metrics?.RMSE, _metrics?.R2);
         }
-        // PREDICTION
-        public (LaptopPrediction prediction, LaptopMetrics metrics) Predict(LaptopData input)
+
+        /// <summary>
+        /// Predicts the price of a laptop based on its specifications.
+        /// </summary>
+        public async Task<(LaptopPrediction prediction, LaptopMetrics metrics)> PredictAsync(LaptopData input)
         {
             if (input == null)
             {
-                _logger.LogWarning("Prediction failed: Input was null");
                 throw new ArgumentNullException(nameof(input));
             }
 
+            await EnsureModelInitializedAsync();
+
             if (_model == null || _predictionEngine == null)
             {
-                _logger.LogWarning("Prediction failed: Model or PredictionEngine is null");
-                throw new Exception(CsvNotFound
+                throw new InvalidOperationException(CsvNotFound
                     ? "Model is not trained. Please confirm use of dummy data first."
                     : "Model not trained.");
             }
 
-            // Validate input data
             ValidateInput(input);
 
             try
             {
-                _logger.LogDebug("Running prediction for input: {@Input}", input);
-                var result = _predictionEngine.Predict(input);
+                var result = await Task.Run(() => _predictionEngine.Predict(input));
 
-                // Ensure prediction is not negative
                 if (result.PredictedPrice < 0)
                 {
                     result.PredictedPrice = 0;
@@ -199,49 +205,52 @@ namespace AIPredictionHub.Services
 
                 return (result, _metrics!);
             }
-            catch (Exception ex)
+            catch (InvalidOperationException ex)
             {
-                _logger.LogError(ex, "Prediction execution failed");
-                throw new Exception($"Prediction failed: {ex.Message}");
+                _logger.LogError(ex, "Laptop prediction execution failed due to model state");
+                throw;
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogError(ex, "Laptop prediction execution failed");
+                throw new InvalidOperationException("Prediction failed due to invalid laptop input.", ex);
             }
         }
-        //input validation
+
         private void ValidateInput(LaptopData input)
         {
             if (string.IsNullOrWhiteSpace(input.Brand))
             {
-                throw new ArgumentException("Missing Brand");
+                throw new ArgumentException("Laptop brand is required.", nameof(input.Brand));
             }
 
             if (string.IsNullOrWhiteSpace(input.Processor))
             {
-                throw new ArgumentException("Missing Processor");
+                throw new ArgumentException("Processor type is required.", nameof(input.Processor));
             }
 
             if (input.RAM <= 0 || input.RAM > 128)
             {
-                throw new ArgumentException("Invalid RAM");
+                throw new ArgumentOutOfRangeException(nameof(input.RAM), "RAM must be between 1 and 128 GB.");
             }
 
             if (input.Storage <= 0 || input.Storage > 4000)
             {
-                throw new ArgumentException("Invalid Storage");
+                throw new ArgumentOutOfRangeException(nameof(input.Storage), "Storage must be between 1 and 4000 GB.");
             }
 
             if (input.ScreenSize < 10 || input.ScreenSize > 20)
             {
-                throw new ArgumentException("Invalid Screen Size");
+                throw new ArgumentOutOfRangeException(nameof(input.ScreenSize), "Screen size must be between 10 and 20 inches.");
             }
         }
-        //Model evaluation metrics
+
+        /// <summary>
+        /// Returns the evaluation metrics for the laptop model.
+        /// </summary>
         public LaptopMetrics GetMetrics()
         {
-            if (_metrics == null)
-            {
-                throw new Exception("Metrics not available");
-            }
-
-            return _metrics;
+            return _metrics ?? throw new InvalidOperationException("Metrics are not available.");
         }
     }
 }

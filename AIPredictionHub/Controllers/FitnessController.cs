@@ -8,56 +8,70 @@ namespace AIPredictionHub.Controllers
     [Authorize]
     public class FitnessController : Controller
     {
-        private readonly FitnessService _service;
+        private readonly IFitnessService _service;
         private readonly ILogger<FitnessController> _logger;
 
-        public FitnessController(FitnessService service, ILogger<FitnessController> logger) //dependency injection
+        public FitnessController(IFitnessService service, ILogger<FitnessController> logger) //dependency injection
         {
             _service = service;
             _logger = logger;
         }
 
-        // Show form
+        /// <summary>
+        /// Displays the Fitness prediction entry form.
+        /// </summary>
         [HttpGet]
         public IActionResult Index()
         {
             return View(new FitnessViewModel());
         }
 
-        // Predict calories
+        /// <summary>
+        /// Processes the calorie burn prediction request.
+        /// </summary>
         [HttpPost]
-        public IActionResult Predict(FitnessViewModel vm)
+        public async Task<IActionResult> Predict(FitnessViewModel viewModel)
         {
             if (!ModelState.IsValid)
             {
-                return View("Index", vm);
+                return View("Index", viewModel);
             }
 
             try
             {
-                var data = new FitnessData
-                {
-                    Weight = vm.Input.Weight ?? 0f,
-                    Duration = vm.Input.Duration ?? 0f,
-                    HeartRate = vm.Input.HeartRate ?? 0f,
-                    ExerciseType = vm.Input.ExerciseType
-                };
+                // Thin controller: map and delegate to service async
+                var data = MapToData(viewModel.Input);
 
-                _logger.LogInformation("Predicting calories for Weight: {Weight}, Duration: {Duration}, HeartRate: {HeartRate}, ExerciseType: {ExerciseType}", data.Weight, data.Duration, data.HeartRate, data.ExerciseType);
-                var (prediction, metrics) = _service.Predict(data);
-                _logger.LogInformation("Calories predicted: {Calories}", prediction.CaloriesBurned);
+                _logger.LogInformation("Predicting calories for input data");
+                var (prediction, metrics) = await _service.PredictAsync(data);
 
-                vm.Prediction = prediction;
-                vm.Metrics = metrics;
-                vm.IsPredicted = true;
+                viewModel.Prediction = prediction;
+                viewModel.Metrics = metrics;
+                viewModel.IsPredicted = true;
             }
-            catch (Exception ex)
+            catch (ArgumentException ex)
             {
-                _logger.LogError(ex, "Error during fitness calorie prediction");
-                ModelState.AddModelError("", ex.Message);
+                _logger.LogWarning(ex, "Invalid fitness input received");
+                ModelState.AddModelError(string.Empty, "Invalid input values. Please review and try again.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogError(ex, "Error during fitness calorie prediction action");
+                ModelState.AddModelError(string.Empty, "Failed to calculate Calories. Please check your inputs.");
             }
 
-            return View("Index", vm);
+            return View("Index", viewModel);
+        }
+
+        private FitnessData MapToData(FitnessInputModel input)
+        {
+            return new FitnessData
+            {
+                Weight = input.Weight ?? 0f,
+                Duration = input.Duration ?? 0f,
+                HeartRate = input.HeartRate ?? 0f,
+                ExerciseType = input.ExerciseType ?? string.Empty
+            };
         }
 
         // Reset form

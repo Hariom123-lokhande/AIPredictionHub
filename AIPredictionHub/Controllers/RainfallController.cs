@@ -8,10 +8,10 @@ namespace AIPredictionHub.Controllers
     [Authorize]
     public class RainfallController : Controller
     {
-        private readonly RainfallService _service;
+        private readonly IRainfallService _service;
         private readonly ILogger<RainfallController> _logger;
 
-        public RainfallController(RainfallService service, ILogger<RainfallController> logger) //dependency injection
+        public RainfallController(IRainfallService service, ILogger<RainfallController> logger) //dependency injection
         {
             _service = service;
             _logger = logger;
@@ -21,48 +21,61 @@ namespace AIPredictionHub.Controllers
         [HttpGet]
         public IActionResult Index()
         {
-            var vm = new RainfallViewModel();
-            return View(vm);
+            var viewModel = new RainfallViewModel();
+            return View(viewModel);
         }
-        //post predict
-       
+
+        /// <summary>
+        /// Handles the rainfall prediction request.
+        /// </summary>
         [HttpPost]
-        public IActionResult Predict(RainfallViewModel vm)
+        public async Task<IActionResult> Predict(RainfallViewModel viewModel)
         {
             if (!ModelState.IsValid)
             {
-                vm.IsPredicted = false;
-                return View("Index", vm);
+                viewModel.IsPredicted = false;
+                return View("Index", viewModel);
             }
 
             try
             {
-                // Map InputModel to RainfallData
-                var rainfallData = new RainfallData
-                {
-                    Temperature = vm.Input.Temperature ?? 0f,
-                    Humidity = vm.Input.Humidity ?? 0f,
-                    WindSpeed = vm.Input.WindSpeed ?? 0f,
-                    Pressure = vm.Input.Pressure ?? 0f
-                };
+                // Mapping VM to Data logic (Standard 22.1: Keep controllers thin)
+                var rainfallData = MapToData(viewModel.Input);
 
-                _logger.LogInformation("Predicting rainfall for Temperature: {Temperature}, Humidity: {Humidity}, WindSpeed: {WindSpeed}, Pressure: {Pressure}", rainfallData.Temperature, rainfallData.Humidity, rainfallData.WindSpeed, rainfallData.Pressure);
-                // Call Service
-                var (prediction, metrics) = _service.Predict(rainfallData);
-                _logger.LogInformation("Rainfall predicted: {Rainfall}", prediction.PredictedRainfall);
-
-                vm.Prediction = prediction;
-                vm.Metrics = metrics;
-                vm.IsPredicted = true;
+                _logger.LogInformation("Predicting rainfall for input data");
+                
+                // Call Service Async
+                var (prediction, metrics) = await _service.PredictAsync(rainfallData);
+                
+                viewModel.Prediction = prediction;
+                viewModel.Metrics = metrics;
+                viewModel.IsPredicted = true;
             }
-            catch (Exception ex)
+            catch (ArgumentException ex)
             {
-                _logger.LogError(ex, "Error during rainfall prediction");
-                ModelState.AddModelError("", ex.Message);
-                vm.IsPredicted = false;
+                _logger.LogWarning(ex, "Invalid rainfall input received");
+                ModelState.AddModelError(string.Empty, "Invalid input values. Please review and try again.");
+                viewModel.IsPredicted = false;
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogError(ex, "Error during rainfall prediction action");
+                ModelState.AddModelError(string.Empty, "An error occurred while calculating the prediction. Please try again.");
+                viewModel.IsPredicted = false;
             }
 
-            return View("Index", vm);
+            return View("Index", viewModel);
+        }
+
+        private RainfallData MapToData(RainfallInputModel input)
+        {
+            return new RainfallData
+            {
+                Temperature = input.Temperature ?? 0f,
+                Humidity = input.Humidity ?? 0f,
+                WindSpeed = input.WindSpeed ?? 0f,
+                Pressure = input.Pressure ?? 0f
+            };
         }
 
         //reset button

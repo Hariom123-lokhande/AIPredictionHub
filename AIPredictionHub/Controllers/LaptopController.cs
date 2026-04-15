@@ -8,16 +8,18 @@ namespace AIPredictionHub.Controllers
     [Authorize]
     public class LaptopController : Controller
     {
-        private readonly LaptopService _service;
+        private readonly ILaptopService _service;
         private readonly ILogger<LaptopController> _logger;
 
-        public LaptopController(LaptopService service, ILogger<LaptopController> logger) //dependency injection
+        public LaptopController(ILaptopService service, ILogger<LaptopController> logger) //dependency injection
         {
             _service = service;
             _logger = logger;
         }
 
-        // Show form — propagates CsvNotFound flag so the view can render the prompt
+        /// <summary>
+        /// Displays the Laptop price prediction entry form.
+        /// </summary>
         [HttpGet]
         public IActionResult Index()
         {
@@ -27,70 +29,86 @@ namespace AIPredictionHub.Controllers
             });
         }
 
-        // Called when the user clicks "Yes, use dummy data"
+        /// <summary>
+        /// Trains the model using dummy data when CSV is missing.
+        /// </summary>
         [HttpPost]
-        public IActionResult UseDummyData()
+        public async Task<IActionResult> UseDummyData()
         {
             try
             {
                 _logger.LogInformation("Attempting to train Laptop model with dummy data");
-                _service.TrainWithDummyData();
-                _logger.LogInformation("Laptop model trained successfully with dummy data");
+                await _service.TrainWithDummyDataAsync();
                 TempData["DummyDataSuccess"] = "Model trained successfully using dummy data. You can now make predictions.";
             }
-            catch (Exception ex)
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogError(ex, "Laptop model training operation failed");
+                TempData["DummyDataError"] = "Training failed because the model pipeline could not be initialized.";
+            }
+            catch (IOException ex)
             {
                 _logger.LogError(ex, "Failed to train Laptop model with dummy data");
-                TempData["DummyDataError"] = $"Failed to train with dummy data: {ex.Message}";
+                TempData["DummyDataError"] = "Failed to train with dummy data. Please try again later.";
             }
 
             return RedirectToAction("Index");
         }
 
-        // Predict price
+        /// <summary>
+        /// Processes the laptop price prediction request.
+        /// </summary>
         [HttpPost]
-        public IActionResult Predict(LaptopViewModel vm)
+        public async Task<IActionResult> Predict(LaptopViewModel viewModel)
         {
-            // If CSV is still missing, send the user back to the prompt
             if (_service.CsvNotFound)
             {
-                _logger.LogWarning("Prediction attempt failed: Training data not available");
-                vm.CsvNotFound = true;
-                ModelState.AddModelError("", "Training data not available. Please choose to use dummy data first.");
-                return View("Index", vm);
+                viewModel.CsvNotFound = true;
+                ModelState.AddModelError(string.Empty, "Training data not available. Please choose to use dummy data first.");
+                return View("Index", viewModel);
             }
 
             if (!ModelState.IsValid)
             {
-                return View("Index", vm);
+                return View("Index", viewModel);
             }
 
             try
             {
-                var data = new LaptopData
-                {
-                    Brand     = vm.Input.Brand     ?? "Unknown",
-                    RAM       = vm.Input.RAM       ?? 0f,
-                    Storage   = vm.Input.Storage   ?? 0f,
-                    Processor = vm.Input.Processor ?? "Unknown",
-                    ScreenSize = vm.Input.ScreenSize ?? 0f
-                };
+                // Thin controller mapping
+                var data = MapToData(viewModel.Input);
 
-                _logger.LogInformation("Predicting laptop price for Brand: {Brand}, RAM: {RAM}, Storage: {Storage}", data.Brand, data.RAM, data.Storage);
-                var (prediction, metrics) = _service.Predict(data);
-                _logger.LogInformation("Laptop price predicted: {Price}", prediction.PredictedPrice);
+                _logger.LogInformation("Predicting laptop price for input data");
+                var (prediction, metrics) = await _service.PredictAsync(data);
 
-                vm.Prediction  = prediction;
-                vm.Metrics     = metrics;
-                vm.IsPredicted = true;
+                viewModel.Prediction  = prediction;
+                viewModel.Metrics     = metrics;
+                viewModel.IsPredicted = true;
             }
-            catch (Exception ex)
+            catch (ArgumentException ex)
             {
-                _logger.LogError(ex, "Error during laptop price prediction");
-                ModelState.AddModelError("", ex.Message);
+                _logger.LogWarning(ex, "Invalid laptop input received");
+                ModelState.AddModelError(string.Empty, "Invalid laptop details. Please review the inputs.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogError(ex, "Error during laptop price prediction action");
+                ModelState.AddModelError(string.Empty, "Could not calculate prediction. Check if inputs are valid.");
             }
 
-            return View("Index", vm);
+            return View("Index", viewModel);
+        }
+
+        private LaptopData MapToData(LaptopInputModel input)
+        {
+            return new LaptopData
+            {
+                Brand     = input.Brand     ?? string.Empty,
+                RAM       = input.RAM       ?? 0f,
+                Storage   = input.Storage   ?? 0f,
+                Processor = input.Processor ?? string.Empty,
+                ScreenSize = input.ScreenSize ?? 0f
+            };
         }
 
         // Reset form
